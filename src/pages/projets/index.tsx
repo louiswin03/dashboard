@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Plus,
@@ -10,91 +10,42 @@ import {
   FolderKanban,
   LayoutGrid,
   List,
+  Trash2,
+  DollarSign,
+  Target,
 } from 'lucide-react';
 import { Card, Button, Badge, Progress } from '../../components/common';
-import { cn, formatDate } from '../../utils';
-
-const projects = [
-  {
-    id: '1',
-    title: 'Refonte site e-commerce',
-    description: 'Migration vers Next.js avec nouveau design',
-    status: 'active',
-    priority: 'high',
-    progress: 65,
-    dueDate: new Date('2024-12-30'),
-    tasks: [
-      { id: '1', title: 'Maquettes Figma', completed: true },
-      { id: '2', title: 'Setup Next.js', completed: true },
-      { id: '3', title: 'Composants UI', completed: true },
-      { id: '4', title: 'Intégration API', completed: false },
-      { id: '5', title: 'Tests & QA', completed: false },
-    ],
-  },
-  {
-    id: '2',
-    title: 'Application mobile fitness',
-    description: 'App React Native pour suivi sportif',
-    status: 'active',
-    priority: 'medium',
-    progress: 30,
-    dueDate: new Date('2025-02-15'),
-    tasks: [
-      { id: '1', title: 'Analyse des besoins', completed: true },
-      { id: '2', title: 'Design UI/UX', completed: true },
-      { id: '3', title: 'Développement', completed: false },
-      { id: '4', title: 'Backend API', completed: false },
-    ],
-  },
-  {
-    id: '3',
-    title: 'Dashboard analytics',
-    description: 'Tableau de bord pour startup fintech',
-    status: 'active',
-    priority: 'high',
-    progress: 85,
-    dueDate: new Date('2024-12-20'),
-    tasks: [
-      { id: '1', title: 'Architecture', completed: true },
-      { id: '2', title: 'Graphiques Recharts', completed: true },
-      { id: '3', title: 'Filtres avancés', completed: true },
-      { id: '4', title: 'Export PDF', completed: false },
-    ],
-  },
-  {
-    id: '4',
-    title: 'Formation React avancé',
-    description: 'Création contenu formation 10h',
-    status: 'completed',
-    priority: 'low',
-    progress: 100,
-    dueDate: new Date('2024-11-30'),
-    tasks: [
-      { id: '1', title: 'Plan de cours', completed: true },
-      { id: '2', title: 'Slides', completed: true },
-      { id: '3', title: 'Exercices', completed: true },
-      { id: '4', title: 'Vidéos', completed: true },
-    ],
-  },
-];
-
-const priorityStyles = {
-  high: { label: 'Haute', color: 'danger' as const },
-  medium: { label: 'Moyenne', color: 'warning' as const },
-  low: { label: 'Basse', color: 'default' as const },
-};
+import { cn, formatDate, formatCurrency } from '../../utils';
+import { useProjects, useDeleteProject } from '../../hooks/useSupabase';
+import ProjectForm from '../../components/forms/ProjectForm';
 
 const statusStyles = {
+  planning: { label: 'Planification', color: 'default' as const },
   active: { label: 'En cours', color: 'accent' as const },
+  on_hold: { label: 'En pause', color: 'warning' as const },
   completed: { label: 'Terminé', color: 'success' as const },
-  archived: { label: 'Archivé', color: 'default' as const },
+  cancelled: { label: 'Annulé', color: 'danger' as const },
 };
 
 export default function Projets() {
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
 
-  const activeProject = projects.find(p => p.id === selectedProject);
+  const { data: projectsData = [], isLoading } = useProjects();
+  const { mutate: deleteProject } = useDeleteProject();
+
+  const activeProject = projectsData.find(p => p.id === selectedProject);
+
+  const handleDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm('Êtes-vous sûr de vouloir supprimer ce projet ?')) {
+      deleteProject(id);
+      if (selectedProject === id) {
+        setSelectedProject(null);
+      }
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -105,7 +56,7 @@ export default function Projets() {
           animate={{ opacity: 1, y: 0 }}
         >
           <h1 className="text-3xl font-display font-semibold">Projets</h1>
-          <p className="text-text-secondary mt-1">Gérez vos projets et tâches</p>
+          <p className="text-text-secondary mt-1">Gérez vos projets entrepreneuriaux</p>
         </motion.div>
 
         <motion.div
@@ -134,7 +85,7 @@ export default function Projets() {
               <List className="w-4 h-4" />
             </button>
           </div>
-          <Button variant="primary">
+          <Button variant="primary" onClick={() => setIsFormOpen(true)}>
             <Plus className="w-4 h-4" />
             Nouveau projet
           </Button>
@@ -144,65 +95,96 @@ export default function Projets() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Projects list */}
         <div className={cn(selectedProject ? 'lg:col-span-2' : 'lg:col-span-3')}>
-          <div className={cn(
-            'grid gap-6',
-            view === 'grid' 
-              ? selectedProject ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
-              : 'grid-cols-1'
-          )}>
-            {projects.map((project, index) => {
-              const priority = priorityStyles[project.priority as keyof typeof priorityStyles];
-              const status = statusStyles[project.status as keyof typeof statusStyles];
-              const completedTasks = project.tasks.filter(t => t.completed).length;
-              const isOverdue = new Date(project.dueDate) < new Date() && project.status !== 'completed';
+          {isLoading ? (
+            <div className="text-center py-8">
+              <p className="text-text-muted">Chargement...</p>
+            </div>
+          ) : projectsData.length === 0 ? (
+            <Card className="p-8 text-center">
+              <FolderKanban className="w-12 h-12 text-text-muted mx-auto mb-3" />
+              <p className="text-text-muted">Aucun projet trouvé</p>
+              <Button
+                variant="primary"
+                className="mt-4"
+                onClick={() => setIsFormOpen(true)}
+              >
+                Créer votre premier projet
+              </Button>
+            </Card>
+          ) : (
+            <div className={cn(
+              'grid gap-6',
+              view === 'grid'
+                ? selectedProject ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+                : 'grid-cols-1'
+            )}>
+              {projectsData.map((project, index) => {
+                const status = statusStyles[project.status];
+                const isOverdue = project.end_date && new Date(project.end_date) < new Date() && project.status !== 'completed';
 
-              return (
-                <motion.div
-                  key={project.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  onClick={() => setSelectedProject(project.id === selectedProject ? null : project.id)}
-                >
-                  <Card className={cn(
-                    'p-5 cursor-pointer transition-all',
-                    selectedProject === project.id 
-                      ? 'border-accent ring-2 ring-accent/20' 
-                      : 'hover:border-accent/30'
-                  )}>
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <Badge variant={status.color}>{status.label}</Badge>
-                        <Badge variant={priority.color}>{priority.label}</Badge>
-                      </div>
-                      <button className="p-1 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-100 transition-colors">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    <h3 className="font-semibold mb-1">{project.title}</h3>
-                    <p className="text-sm text-text-muted mb-4">{project.description}</p>
-
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-text-secondary">{completedTasks}/{project.tasks.length} tâches</span>
-                        <span className="font-medium text-accent">{project.progress}%</span>
-                      </div>
-                      <Progress value={project.progress} size="sm" />
-                    </div>
-
-                    <div className={cn(
-                      'flex items-center gap-2 mt-4 pt-4 border-t border-white/5 text-sm',
-                      isOverdue ? 'text-danger' : 'text-text-muted'
+                return (
+                  <motion.div
+                    key={project.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    onClick={() => setSelectedProject(project.id === selectedProject ? null : project.id)}
+                  >
+                    <Card className={cn(
+                      'p-5 cursor-pointer transition-all group',
+                      selectedProject === project.id
+                        ? 'border-accent ring-2 ring-accent/20'
+                        : 'hover:border-accent/30'
                     )}>
-                      {isOverdue ? <AlertCircle className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
-                      <span>{formatDate(project.dueDate)}</span>
-                    </div>
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </div>
+                      <div className="flex items-start justify-between mb-3">
+                        <Badge variant={status.color}>{status.label}</Badge>
+                        <button
+                          onClick={(e) => handleDelete(project.id, e)}
+                          className="p-1 rounded-lg text-danger/70 hover:text-danger hover:bg-danger/10 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <h3 className="font-semibold mb-1">{project.name}</h3>
+                      {project.description && (
+                        <p className="text-sm text-text-muted mb-4 line-clamp-2">{project.description}</p>
+                      )}
+
+                      <div className="space-y-3">
+                        {project.budget && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <DollarSign className="w-4 h-4 text-text-muted" />
+                            <span className="text-text-secondary">
+                              Budget: {formatCurrency(project.budget)}
+                            </span>
+                          </div>
+                        )}
+                        {project.revenue_goal && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <Target className="w-4 h-4 text-text-muted" />
+                            <span className="text-text-secondary">
+                              Objectif: {formatCurrency(project.revenue_goal)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {project.end_date && (
+                        <div className={cn(
+                          'flex items-center gap-2 mt-4 pt-4 border-t border-white/5 text-sm',
+                          isOverdue ? 'text-danger' : 'text-text-muted'
+                        )}>
+                          {isOverdue ? <AlertCircle className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
+                          <span>Échéance: {formatDate(new Date(project.end_date))}</span>
+                        </div>
+                      )}
+                    </Card>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Project detail panel */}
@@ -218,48 +200,52 @@ export default function Projets() {
                   <FolderKanban className="w-5 h-5 text-accent" />
                 </div>
                 <div>
-                  <h3 className="font-semibold">{activeProject.title}</h3>
-                  <p className="text-sm text-text-muted">{activeProject.tasks.length} tâches</p>
+                  <h3 className="font-semibold">{activeProject.name}</h3>
+                  <Badge variant={statusStyles[activeProject.status].color} className="mt-1">
+                    {statusStyles[activeProject.status].label}
+                  </Badge>
                 </div>
               </div>
 
-              <div className="space-y-3">
-                {activeProject.tasks.map((task, index) => (
-                  <motion.div
-                    key={task.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-surface-100/50 transition-colors cursor-pointer group"
-                  >
-                    <button className={cn(
-                      'flex-shrink-0 transition-colors',
-                      task.completed ? 'text-success' : 'text-text-muted hover:text-accent'
-                    )}>
-                      {task.completed ? (
-                        <CheckCircle2 className="w-5 h-5" />
-                      ) : (
-                        <Circle className="w-5 h-5" />
-                      )}
-                    </button>
-                    <span className={cn(
-                      'flex-1',
-                      task.completed && 'line-through text-text-muted'
-                    )}>
-                      {task.title}
-                    </span>
-                  </motion.div>
-                ))}
-              </div>
+              {activeProject.description && (
+                <div className="mb-4">
+                  <p className="text-sm text-text-secondary">{activeProject.description}</p>
+                </div>
+              )}
 
-              <button className="w-full mt-4 py-3 text-center text-sm text-accent hover:text-accent-light transition-colors rounded-xl hover:bg-accent/5 flex items-center justify-center gap-2">
-                <Plus className="w-4 h-4" />
-                Ajouter une tâche
-              </button>
+              <div className="space-y-3 pt-4 border-t border-white/5">
+                {activeProject.start_date && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-text-muted">Début</span>
+                    <span className="text-text-secondary">{formatDate(new Date(activeProject.start_date))}</span>
+                  </div>
+                )}
+                {activeProject.end_date && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-text-muted">Fin</span>
+                    <span className="text-text-secondary">{formatDate(new Date(activeProject.end_date))}</span>
+                  </div>
+                )}
+                {activeProject.budget && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-text-muted">Budget</span>
+                    <span className="font-medium text-accent">{formatCurrency(activeProject.budget)}</span>
+                  </div>
+                )}
+                {activeProject.revenue_goal && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-text-muted">Objectif revenu</span>
+                    <span className="font-medium text-success">{formatCurrency(activeProject.revenue_goal)}</span>
+                  </div>
+                )}
+              </div>
             </Card>
           </motion.div>
         )}
       </div>
+
+      {/* Project Form Modal */}
+      <ProjectForm isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} />
     </div>
   );
 }

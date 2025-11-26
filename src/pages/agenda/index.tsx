@@ -1,41 +1,177 @@
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Card, Button } from '../../components/common';
-import { cn } from '../../utils';
+import {
+  Calendar as CalendarIcon,
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  MapPin,
+  Trash2,
+  Clock,
+} from 'lucide-react';
+import { Card, Button, Badge } from '../../components/common';
+import { cn, formatDate } from '../../utils';
+import { useEvents, useDeleteEvent } from '../../hooks/useSupabase';
+import EventForm from '../../components/forms/EventForm';
 
 const days = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-const currentMonth = 'Décembre 2024';
 
-// Generate calendar days
-const generateCalendarDays = () => {
-  const days = [];
-  // Previous month days
-  for (let i = 0; i < 6; i++) {
-    days.push({ day: 25 + i, isCurrentMonth: false, events: [] });
-  }
-  // Current month days
-  for (let i = 1; i <= 31; i++) {
-    const events = [];
-    if (i === 5) events.push({ title: 'Call client', color: 'bg-blue-500' });
-    if (i === 12) events.push({ title: 'Deadline projet', color: 'bg-danger' });
-    if (i === 15) events.push({ title: 'Réunion équipe', color: 'bg-accent' }, { title: 'Formation', color: 'bg-success' });
-    if (i === 20) events.push({ title: 'Livraison', color: 'bg-warning' });
-    if (i === 25) events.push({ title: 'Noël', color: 'bg-success' });
-    days.push({ day: i, isCurrentMonth: true, isToday: i === 18, events });
-  }
-  return days;
+const eventTypeColors = {
+  meeting: 'bg-blue-500',
+  deadline: 'bg-danger',
+  conference: 'bg-accent',
+  other: 'bg-warning',
 };
 
-const calendarDays = generateCalendarDays();
-
-const upcomingEvents = [
-  { id: 1, title: 'Call client ABC', time: '10:00 - 11:00', date: 'Aujourd\'hui', type: 'meeting' },
-  { id: 2, title: 'Livraison maquettes', time: '14:00', date: 'Aujourd\'hui', type: 'deadline' },
-  { id: 3, title: 'Réunion équipe', time: '09:00 - 10:00', date: 'Demain', type: 'meeting' },
-  { id: 4, title: 'Déclaration TVA', time: 'Toute la journée', date: '20 Dec', type: 'reminder' },
-];
+const eventTypeLabels = {
+  meeting: 'Réunion',
+  deadline: 'Échéance',
+  conference: 'Conférence',
+  other: 'Autre',
+};
 
 export default function Agenda() {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+
+  // Get start and end of current month for fetching events
+  const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).toISOString();
+  const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59).toISOString();
+
+  const { data: eventsData = [], isLoading } = useEvents(startOfMonth, endOfMonth);
+  const { mutate: deleteEvent } = useDeleteEvent();
+
+  const currentMonth = currentDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+
+  // Generate calendar days
+  const calendarDays = useMemo(() => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+
+    // Get first day of week (0 = Sunday, 1 = Monday)
+    let firstDayOfWeek = firstDay.getDay();
+    // Convert to Monday = 0
+    firstDayOfWeek = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+
+    const days = [];
+
+    // Previous month days
+    const prevMonthLastDay = new Date(year, month, 0).getDate();
+    for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+      days.push({
+        day: prevMonthLastDay - i,
+        isCurrentMonth: false,
+        date: new Date(year, month - 1, prevMonthLastDay - i),
+        events: []
+      });
+    }
+
+    // Current month days
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let i = 1; i <= daysInMonth; i++) {
+      const date = new Date(year, month, i);
+      const dateKey = date.toISOString().split('T')[0];
+
+      // Filter events for this day
+      const dayEvents = eventsData.filter(event => {
+        const eventDate = new Date(event.start_time);
+        return eventDate.toISOString().split('T')[0] === dateKey;
+      });
+
+      const isToday = date.getTime() === today.getTime();
+
+      days.push({
+        day: i,
+        isCurrentMonth: true,
+        isToday,
+        date,
+        events: dayEvents
+      });
+    }
+
+    // Next month days to fill the grid
+    const remainingDays = 42 - days.length; // 6 weeks * 7 days
+    for (let i = 1; i <= remainingDays; i++) {
+      days.push({
+        day: i,
+        isCurrentMonth: false,
+        date: new Date(year, month + 1, i),
+        events: []
+      });
+    }
+
+    return days;
+  }, [currentDate, eventsData]);
+
+  // Get upcoming events (next 7 days)
+  const upcomingEvents = useMemo(() => {
+    const now = new Date();
+    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    return eventsData
+      .filter(event => {
+        const eventDate = new Date(event.start_time);
+        return eventDate >= now && eventDate <= nextWeek;
+      })
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+      .slice(0, 10);
+  }, [eventsData]);
+
+  const handlePrevMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  };
+
+  const handleToday = () => {
+    setCurrentDate(new Date());
+  };
+
+  const handleDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm('Êtes-vous sûr de vouloir supprimer cet événement ?')) {
+      deleteEvent(id);
+    }
+  };
+
+  const formatEventTime = (startTime: string, endTime?: string) => {
+    const start = new Date(startTime);
+    const startStr = start.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+    if (endTime) {
+      const end = new Date(endTime);
+      const endStr = end.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      return `${startStr} - ${endStr}`;
+    }
+
+    return startStr;
+  };
+
+  const getRelativeDate = (date: Date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const eventDate = new Date(date);
+    eventDate.setHours(0, 0, 0, 0);
+
+    const diff = eventDate.getTime() - today.getTime();
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+    if (days === 0) return "Aujourd'hui";
+    if (days === 1) return 'Demain';
+    if (days > 1 && days < 7) return `Dans ${days} jours`;
+
+    return formatDate(date);
+  };
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -53,7 +189,7 @@ export default function Agenda() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <Button variant="primary">
+          <Button variant="primary" onClick={() => setIsFormOpen(true)}>
             <Plus className="w-4 h-4" />
             Nouvel événement
           </Button>
@@ -70,15 +206,24 @@ export default function Agenda() {
           <Card className="p-6">
             {/* Month navigation */}
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold">{currentMonth}</h2>
+              <h2 className="text-xl font-semibold capitalize">{currentMonth}</h2>
               <div className="flex items-center gap-2">
-                <button className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-100 transition-colors">
+                <button
+                  onClick={handlePrevMonth}
+                  className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-100 transition-colors"
+                >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
-                <button className="px-4 py-2 text-sm font-medium text-accent hover:bg-accent/10 rounded-lg transition-colors">
+                <button
+                  onClick={handleToday}
+                  className="px-4 py-2 text-sm font-medium text-accent hover:bg-accent/10 rounded-lg transition-colors"
+                >
                   Aujourd'hui
                 </button>
-                <button className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-100 transition-colors">
+                <button
+                  onClick={handleNextMonth}
+                  className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-100 transition-colors"
+                >
                   <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
@@ -103,11 +248,12 @@ export default function Agenda() {
                   transition={{ delay: index * 0.01 }}
                   className={cn(
                     'min-h-[100px] p-2 rounded-lg border transition-all cursor-pointer',
-                    day.isCurrentMonth 
-                      ? 'border-white/5 hover:border-accent/30 hover:bg-surface-100/50' 
+                    day.isCurrentMonth
+                      ? 'border-white/5 hover:border-accent/30 hover:bg-surface-100/50'
                       : 'border-transparent opacity-40',
                     day.isToday && 'border-accent bg-accent/5'
                   )}
+                  onClick={() => setSelectedDate(day.date)}
                 >
                   <span className={cn(
                     'text-sm font-medium',
@@ -116,10 +262,15 @@ export default function Agenda() {
                     {day.day}
                   </span>
                   <div className="mt-1 space-y-1">
-                    {day.events.slice(0, 2).map((event, eventIndex) => (
+                    {day.events.slice(0, 2).map((event) => (
                       <div
-                        key={eventIndex}
-                        className={cn('text-xs px-1.5 py-0.5 rounded truncate', event.color, 'bg-opacity-20')}
+                        key={event.id}
+                        className={cn(
+                          'text-xs px-1.5 py-0.5 rounded truncate',
+                          eventTypeColors[event.type],
+                          'bg-opacity-20 text-white'
+                        )}
+                        title={event.title}
                       >
                         {event.title}
                       </div>
@@ -150,28 +301,63 @@ export default function Agenda() {
               <h3 className="text-lg font-semibold">À venir</h3>
             </div>
 
-            <div className="space-y-4">
-              {upcomingEvents.map((event, index) => (
-                <motion.div
-                  key={event.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.2 + index * 0.1 }}
-                  className="p-3 rounded-xl border border-white/5 hover:border-accent/20 hover:bg-surface-100/50 transition-all cursor-pointer"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h4 className="font-medium">{event.title}</h4>
-                      <p className="text-sm text-text-muted mt-1">{event.time}</p>
+            <div className="space-y-3">
+              {isLoading ? (
+                <div className="text-center py-8">
+                  <p className="text-text-muted text-sm">Chargement...</p>
+                </div>
+              ) : upcomingEvents.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-text-muted text-sm">Aucun événement à venir</p>
+                </div>
+              ) : (
+                upcomingEvents.map((event, index) => (
+                  <motion.div
+                    key={event.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.2 + index * 0.05 }}
+                    className="p-3 rounded-xl border border-white/5 hover:border-accent/20 hover:bg-surface-100/50 transition-all group"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-medium">{event.title}</h4>
+                          <Badge variant="default" className="text-xs">
+                            {eventTypeLabels[event.type]}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-text-muted">
+                          <Clock className="w-3 h-3" />
+                          {formatEventTime(event.start_time, event.end_time)}
+                        </div>
+                        {event.location && (
+                          <div className="flex items-center gap-2 text-xs text-text-muted mt-1">
+                            <MapPin className="w-3 h-3" />
+                            {event.location}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => handleDelete(event.id, e)}
+                        className="p-1 rounded-lg text-danger/70 hover:text-danger hover:bg-danger/10 transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
                     </div>
-                    <span className="text-xs text-text-muted">{event.date}</span>
-                  </div>
-                </motion.div>
-              ))}
+                    <div className="text-xs text-text-muted">
+                      {getRelativeDate(new Date(event.start_time))}
+                    </div>
+                  </motion.div>
+                ))
+              )}
             </div>
           </Card>
         </motion.div>
       </div>
+
+      {/* Event Form Modal */}
+      <EventForm isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} />
     </div>
   );
 }

@@ -118,107 +118,185 @@ export default function Dashboard() {
     );
   }
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="space-y-6">
+      {/* Hero Section avec Stats Principales */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/20 via-surface-50 to-secondary/10 border border-white/10 p-8"
+      >
+        {/* Background effects */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-secondary/10 rounded-full blur-3xl"></div>
+
+        <div className="relative z-10">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 mb-8">
+            <div>
+              <motion.p
+                className="text-text-muted text-sm uppercase tracking-wider mb-2"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2 }}
+              >
+                Dashboard
+              </motion.p>
+              <motion.h1
+                className="text-4xl md:text-5xl font-display font-bold mb-2"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 }}
+              >
+                Bonjour, {userName}
+              </motion.h1>
+              <motion.p
+                className="text-text-secondary text-lg"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.4 }}
+              >
+                Voici votre activité en temps réel
+              </motion.p>
+            </div>
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.5 }}
+              className="flex items-center gap-3"
+            >
+              <Button variant="secondary">
+                Exporter
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+              <Button variant="primary">
+                <Sparkles className="w-4 h-4" />
+                Nouvelle entrée
+              </Button>
+            </motion.div>
+          </div>
+
+          {/* Mini Stats dans le Hero */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { label: 'Revenus', value: formatCurrency(stats?.monthlyRevenue || 0), icon: Wallet, color: 'text-primary' },
+              { label: 'Portfolio', value: formatCurrency(stats?.portfolioValue || 0), icon: TrendingUp, color: 'text-secondary' },
+              { label: 'Bénéfice', value: formatCurrency(stats?.netProfit || 0), icon: PiggyBank, color: 'text-success' },
+              { label: 'Dépenses', value: formatCurrency(stats?.monthlyExpenses || 0), icon: Receipt, color: 'text-warning' },
+            ].map((stat, i) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6 + i * 0.1 }}
+                className="bg-white/5 backdrop-blur-sm rounded-2xl p-4 border border-white/10"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <stat.icon className={`w-5 h-5 ${stat.color}`} />
+                  <span className="text-text-muted text-sm">{stat.label}</span>
+                </div>
+                <p className="text-2xl font-bold">{stat.value}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Bento Grid Layout - Ledger Style */}
+      <div className="grid grid-cols-12 gap-6">
+        {/* Large Chart - Takes 8 columns on desktop */}
         <motion.div
-          initial={{ opacity: 0, y: -20 }}
+          className="col-span-12 lg:col-span-8 row-span-2"
+          initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
+          transition={{ duration: 0.7, delay: 0.3, type: "spring" }}
         >
-          <h1 className="text-3xl font-display font-semibold">
-            Bonjour, <span className="gradient-text">{userName || 'Entrepreneur'}</span>
-          </h1>
-          <p className="text-text-secondary mt-1">
-            Voici un aperçu de votre activité ce mois-ci
-          </p>
+          <div className="relative group h-full">
+            {/* Animated border glow */}
+            <div className="absolute -inset-1 bg-gradient-to-r from-primary/40 via-accent/40 to-secondary/40 rounded-3xl blur-lg opacity-0 group-hover:opacity-100 transition duration-1000"></div>
+            <div className="relative h-full bg-gradient-to-br from-surface-50 to-surface-100 rounded-3xl border border-white/10 overflow-hidden">
+              {/* Corner accent */}
+              <div className="absolute top-0 left-0 w-40 h-40 bg-gradient-to-br from-primary/20 to-transparent rounded-br-full"></div>
+              <div className="absolute bottom-0 right-0 w-40 h-40 bg-gradient-to-tl from-secondary/20 to-transparent rounded-tl-full"></div>
+              <RevenueChart data={chartData} />
+            </div>
+          </div>
         </motion.div>
 
+        {/* Portfolio Widget - Takes 4 columns */}
         <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-          className="flex items-center gap-3"
+          className="col-span-12 lg:col-span-4"
+          initial={{ opacity: 0, x: 40 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.7, delay: 0.4, type: "spring" }}
         >
-          <Button variant="secondary">
-            Exporter
-            <ArrowRight className="w-4 h-4" />
-          </Button>
-          <Button variant="primary">
-            <Sparkles className="w-4 h-4" />
-            Nouvelle entrée
-          </Button>
+          <div className="relative group h-full">
+            <div className="absolute -inset-0.5 bg-gradient-to-br from-accent/30 to-secondary/30 rounded-3xl blur opacity-0 group-hover:opacity-100 transition duration-1000"></div>
+            <div className="relative h-full">
+              <PortfolioWidget
+                assets={portfolioAssets}
+                totalValue={stats?.portfolioValue || 0}
+                totalChange={stats?.portfolioChange || 0}
+              />
+            </div>
+          </div>
         </motion.div>
-      </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard
-          title="Revenus du mois"
-          value={stats?.monthlyRevenue || 0}
-          change={stats?.monthlyRevenueChange || 0}
-          icon={Wallet}
-          delay={0.1}
-        />
-        <StatCard
-          title="Dépenses du mois"
-          value={stats?.monthlyExpenses || 0}
-          change={stats?.monthlyExpensesChange || 0}
-          icon={Receipt}
-          delay={0.15}
-        />
-        <StatCard
-          title="Portfolio"
-          value={stats?.portfolioValue || 0}
-          change={stats?.portfolioChange || 0}
-          icon={TrendingUp}
-          delay={0.2}
-        />
-        <StatCard
-          title="Bénéfice net"
-          value={stats?.netProfit || 0}
-          change={stats?.netProfitChange || 0}
-          icon={PiggyBank}
-          delay={0.25}
-        />
-      </div>
-
-      {/* Main content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column - Chart */}
-        <div className="lg:col-span-2">
-          <RevenueChart data={chartData} />
-        </div>
-
-        {/* Right column - Portfolio */}
-        <div>
-          <PortfolioWidget
-            assets={portfolioAssets}
-            totalValue={stats?.portfolioValue || 0}
-            totalChange={stats?.portfolioChange || 0}
-          />
-        </div>
+        {/* Goals Widget - Stacked below Portfolio */}
+        <motion.div
+          className="col-span-12 lg:col-span-4"
+          initial={{ opacity: 0, x: 40 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.7, delay: 0.5, type: "spring" }}
+        >
+          <div className="relative group">
+            <div className="absolute -inset-0.5 bg-gradient-to-br from-success/30 to-accent/30 rounded-3xl blur opacity-0 group-hover:opacity-100 transition duration-1000"></div>
+            <div className="relative">
+              <GoalsWidget goals={goalsForWidget} />
+            </div>
+          </div>
+        </motion.div>
       </div>
 
       {/* Second row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <motion.div
+        className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.8, delay: 0.7 }}
+      >
         {/* Transactions */}
-        <div className="lg:col-span-2">
+        <motion.div
+          className="lg:col-span-2"
+          whileHover={{ scale: 1.01 }}
+          transition={{ type: "spring", stiffness: 300 }}
+        >
           <RecentTransactions transactions={transactionsForWidget} />
-        </div>
+        </motion.div>
 
         {/* Goals */}
-        <div>
+        <motion.div
+          whileHover={{ scale: 1.01 }}
+          transition={{ type: "spring", stiffness: 300 }}
+        >
           <GoalsWidget goals={goalsForWidget} />
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {/* Third row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <motion.div
+        className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.8, delay: 0.9 }}
+      >
         {/* Events */}
-        <div>
+        <motion.div
+          whileHover={{ scale: 1.01 }}
+          transition={{ type: "spring", stiffness: 300 }}
+        >
           <UpcomingEvents events={eventsForWidget} currentDate={new Date()} />
-        </div>
+        </motion.div>
 
         {/* Quick actions or other widgets can go here */}
         <motion.div
@@ -241,7 +319,7 @@ export default function Dashboard() {
             </Button>
           </div>
         </motion.div>
-      </div>
+      </motion.div>
     </div>
   );
 }

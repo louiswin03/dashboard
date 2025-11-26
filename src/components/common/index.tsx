@@ -8,21 +8,28 @@ import { cn } from '../../utils';
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   hover?: boolean;
   gradient?: boolean;
+  glass?: boolean;
 }
 
 export const Card = forwardRef<HTMLDivElement, CardProps>(
-  ({ className, hover = false, gradient = false, children, ...props }, ref) => {
+  ({ className, hover = false, gradient = false, glass = false, children, ...props }, ref) => {
     return (
       <div
         ref={ref}
         className={cn(
-          'bg-surface-50 rounded-2xl border border-white/5 shadow-card',
-          hover && 'transition-all duration-300 hover:border-accent/20 hover:shadow-glow-sm',
+          'relative rounded-2xl border shadow-card overflow-hidden',
+          glass
+            ? 'bg-surface-50/50 backdrop-blur-xl border-white/10'
+            : 'bg-surface-50 border-white/5',
+          hover && 'transition-all duration-500 hover:border-accent/30 hover:shadow-glow-md hover:-translate-y-1',
           gradient && 'gradient-border',
           className
         )}
         {...props}
       >
+        {glass && (
+          <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+        )}
         {children}
       </div>
     );
@@ -32,18 +39,25 @@ Card.displayName = 'Card';
 
 // Motion Card
 export const MotionCard = forwardRef<HTMLDivElement, CardProps & HTMLMotionProps<'div'>>(
-  ({ className, hover = false, gradient = false, children, ...props }, ref) => {
+  ({ className, hover = false, gradient = false, glass = false, children, ...props }, ref) => {
     return (
       <motion.div
         ref={ref}
         className={cn(
-          'bg-surface-50 rounded-2xl border border-white/5 shadow-card',
-          hover && 'transition-all duration-300 hover:border-accent/20 hover:shadow-glow-sm',
+          'relative rounded-2xl border shadow-card overflow-hidden',
+          glass
+            ? 'bg-surface-50/50 backdrop-blur-xl border-white/10'
+            : 'bg-surface-50 border-white/5',
+          hover && 'transition-all duration-500 hover:border-accent/30 hover:shadow-glow-md hover:-translate-y-1',
           gradient && 'gradient-border',
           className
         )}
+        whileHover={hover ? { y: -4, boxShadow: '0 20px 60px -12px rgba(201, 169, 98, 0.25)' } : undefined}
         {...props}
       >
+        {glass && (
+          <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+        )}
         {children}
       </motion.div>
     );
@@ -61,10 +75,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', loading = false, children, disabled, ...props }, ref) => {
     const variants = {
-      primary: 'bg-accent text-surface hover:bg-accent-light active:scale-[0.98]',
-      secondary: 'bg-surface-100 text-text-primary border border-white/10 hover:bg-surface-200 hover:border-accent/30 active:scale-[0.98]',
-      ghost: 'text-text-secondary hover:text-text-primary hover:bg-surface-100',
-      danger: 'bg-danger/10 text-danger hover:bg-danger/20 active:scale-[0.98]',
+      primary: 'relative bg-gradient-to-r from-accent via-accent to-accent-light text-surface hover:shadow-glow-lg hover:scale-[1.02] active:scale-[0.98] overflow-hidden group',
+      secondary: 'bg-surface-100 text-text-primary border border-white/10 hover:bg-surface-200 hover:border-accent/30 hover:shadow-glow-sm active:scale-[0.98]',
+      ghost: 'text-text-secondary hover:text-text-primary hover:bg-surface-100/50',
+      danger: 'bg-danger/10 text-danger border border-danger/20 hover:bg-danger/20 hover:shadow-glow-sm hover:shadow-danger/20 active:scale-[0.98]',
     };
 
     const sizes = {
@@ -77,7 +91,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={cn(
-          'inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-all duration-200',
+          'inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-all duration-300',
           'focus:outline-none focus:ring-2 focus:ring-accent/50 focus:ring-offset-2 focus:ring-offset-surface',
           'disabled:opacity-50 disabled:cursor-not-allowed',
           variants[variant],
@@ -87,6 +101,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || loading}
         {...props}
       >
+        {variant === 'primary' && !disabled && (
+          <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
+        )}
         {loading && (
           <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
             <circle
@@ -105,7 +122,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             />
           </svg>
         )}
-        {children}
+        <span className="relative z-10">{children}</span>
       </button>
     );
   }

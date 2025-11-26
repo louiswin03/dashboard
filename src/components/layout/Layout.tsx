@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import AnimatedBackground from './AnimatedBackground';
 import { cn } from '../../utils';
 
 export default function Layout() {
@@ -10,11 +11,8 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-surface relative">
-      {/* Background gradient */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-gradient-radial from-accent/5 via-transparent to-transparent opacity-50" />
-        <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-gradient-radial from-accent/3 via-transparent to-transparent opacity-50" />
-      </div>
+      {/* Animated Background */}
+      <AnimatedBackground />
 
       {/* Sidebar */}
       <Sidebar

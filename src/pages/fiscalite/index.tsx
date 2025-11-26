@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Receipt,
@@ -9,9 +10,14 @@ import {
   Euro,
   Building2,
   Download,
+  Plus,
+  Trash2,
+  AlertCircle,
 } from 'lucide-react';
-import { Card, Button, Badge, Progress } from '../../components/common';
-import { cn, formatCurrency, formatPercent } from '../../utils';
+import { Card, Button, Badge } from '../../components/common';
+import { cn, formatCurrency, formatDate, formatPercent } from '../../utils';
+import { useTaxObligations, useDeleteTaxObligation, useDashboardStats } from '../../hooks/useSupabase';
+import TaxObligationForm from '../../components/forms/TaxObligationForm';
 import {
   BarChart,
   Bar,
@@ -21,36 +27,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-
-const taxData = [
-  { name: 'T1', revenue: 28500, tva: 5700, ir: 4275 },
-  { name: 'T2', revenue: 32100, tva: 6420, ir: 4815 },
-  { name: 'T3', revenue: 35400, tva: 7080, ir: 5310 },
-  { name: 'T4', revenue: 38850, tva: 7770, ir: 5828 },
-];
-
-const obligations = [
-  { id: '1', title: 'Déclaration TVA T4', dueDate: '15 Jan 2025', status: 'upcoming', amount: 7770 },
-  { id: '2', title: 'Acompte IS', dueDate: '15 Mar 2025', status: 'upcoming', amount: 3200 },
-  { id: '3', title: 'Déclaration revenus 2024', dueDate: '1 Juin 2025', status: 'upcoming', amount: null },
-  { id: '4', title: 'Déclaration TVA T3', dueDate: '15 Oct 2024', status: 'completed', amount: 7080 },
-  { id: '5', title: 'CFE', dueDate: '15 Déc 2024', status: 'completed', amount: 890 },
-];
-
-const deductions = [
-  { id: '1', category: 'Matériel informatique', amount: 2450, status: 'validated' },
-  { id: '2', category: 'Abonnements logiciels', amount: 1890, status: 'validated' },
-  { id: '3', category: 'Frais de déplacement', amount: 980, status: 'pending' },
-  { id: '4', category: 'Formation professionnelle', amount: 1500, status: 'validated' },
-  { id: '5', category: 'Téléphone & Internet', amount: 720, status: 'validated' },
-];
-
-const stats = [
-  { label: 'CA annuel', value: 134850, icon: Euro, change: 18.3 },
-  { label: 'TVA collectée', value: 26970, icon: Receipt, change: null },
-  { label: 'Charges déductibles', value: 7540, icon: TrendingDown, change: null },
-  { label: 'Impôt estimé', value: 20228, icon: Building2, change: -5.2 },
-];
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -78,8 +54,78 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function Fiscalite() {
-  const totalDeductions = deductions.reduce((sum, d) => sum + d.amount, 0);
-  const validatedDeductions = deductions.filter(d => d.status === 'validated').reduce((sum, d) => sum + d.amount, 0);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+
+  // Fetch data
+  const { data: taxObligations = [], isLoading } = useTaxObligations();
+  const { mutate: deleteTaxObligation } = useDeleteTaxObligation();
+  const { data: stats } = useDashboardStats();
+
+  // Mock tax chart data (in real app, would calculate from transactions)
+  const taxData = [
+    {
+      name: 'T1',
+      revenue: (stats?.monthlyRevenue || 0) * 3 * 0.85,
+      tva: (stats?.monthlyRevenue || 0) * 3 * 0.85 * 0.2,
+      ir: (stats?.monthlyRevenue || 0) * 3 * 0.85 * 0.15,
+    },
+    {
+      name: 'T2',
+      revenue: (stats?.monthlyRevenue || 0) * 3 * 0.92,
+      tva: (stats?.monthlyRevenue || 0) * 3 * 0.92 * 0.2,
+      ir: (stats?.monthlyRevenue || 0) * 3 * 0.92 * 0.15,
+    },
+    {
+      name: 'T3',
+      revenue: (stats?.monthlyRevenue || 0) * 3 * 0.98,
+      tva: (stats?.monthlyRevenue || 0) * 3 * 0.98 * 0.2,
+      ir: (stats?.monthlyRevenue || 0) * 3 * 0.98 * 0.15,
+    },
+    {
+      name: 'T4',
+      revenue: (stats?.monthlyRevenue || 0) * 3,
+      tva: (stats?.monthlyRevenue || 0) * 3 * 0.2,
+      ir: (stats?.monthlyRevenue || 0) * 3 * 0.15,
+    },
+  ];
+
+  // Calculate stats
+  const yearlyRevenue = taxData.reduce((sum, q) => sum + q.revenue, 0);
+  const yearlyTVA = taxData.reduce((sum, q) => sum + q.tva, 0);
+  const estimatedTax = taxData.reduce((sum, q) => sum + q.ir, 0);
+
+  // Separate upcoming and completed obligations
+  const { upcoming, completed } = useMemo(() => {
+    const now = new Date();
+    const upcoming = taxObligations
+      .filter(o => !o.is_paid && new Date(o.due_date) >= now)
+      .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+
+    const completed = taxObligations
+      .filter(o => o.is_paid)
+      .sort((a, b) => new Date(b.due_date).getTime() - new Date(a.due_date).getTime())
+      .slice(0, 5);
+
+    return { upcoming, completed };
+  }, [taxObligations]);
+
+  const handleDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm('Êtes-vous sûr de vouloir supprimer cette obligation fiscale ?')) {
+      deleteTaxObligation(id);
+    }
+  };
+
+  const isOverdue = (dueDate: string) => {
+    return new Date(dueDate) < new Date();
+  };
+
+  const displayStats = [
+    { label: 'CA annuel estimé', value: yearlyRevenue, icon: Euro, change: 18.3 },
+    { label: 'TVA collectée', value: yearlyTVA, icon: Receipt, change: null },
+    { label: 'Charges déductibles', value: stats?.totalDeductibleExpenses || 0, icon: TrendingDown, change: null },
+    { label: 'Impôt estimé', value: estimatedTax, icon: Building2, change: -5.2 },
+  ];
 
   return (
     <div className="space-y-8">
@@ -103,16 +149,16 @@ export default function Fiscalite() {
             <Download className="w-4 h-4" />
             Export fiscal
           </Button>
-          <Button variant="primary">
-            <Calculator className="w-4 h-4" />
-            Simuler
+          <Button variant="primary" onClick={() => setIsFormOpen(true)}>
+            <Plus className="w-4 h-4" />
+            Ajouter obligation
           </Button>
         </motion.div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, index) => {
+        {displayStats.map((stat, index) => {
           const Icon = stat.icon;
           return (
             <motion.div
@@ -198,94 +244,117 @@ export default function Fiscalite() {
             </div>
 
             <div className="space-y-3">
-              {obligations.map((item, index) => (
-                <motion.div
-                  key={item.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.4 + index * 0.05 }}
-                  className={cn(
-                    'p-3 rounded-xl border transition-all cursor-pointer',
-                    item.status === 'completed'
-                      ? 'border-success/20 bg-success/5'
-                      : 'border-white/5 hover:border-accent/20 hover:bg-surface-100/50'
+              {isLoading ? (
+                <div className="text-center py-8">
+                  <p className="text-text-muted text-sm">Chargement...</p>
+                </div>
+              ) : upcoming.length === 0 && completed.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-text-muted text-sm">Aucune obligation</p>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => setIsFormOpen(true)}
+                  >
+                    Ajouter une obligation
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  {upcoming.map((item, index) => {
+                    const overdue = isOverdue(item.due_date);
+                    return (
+                      <motion.div
+                        key={item.id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.4 + index * 0.05 }}
+                        className={cn(
+                          'p-3 rounded-xl border transition-all group',
+                          overdue
+                            ? 'border-danger/20 bg-danger/5'
+                            : 'border-white/5 hover:border-accent/20 hover:bg-surface-100/50'
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          {overdue ? (
+                            <AlertCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" />
+                          ) : (
+                            <Clock className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+                          )}
+                          <div className="flex-1">
+                            <p className={cn('font-medium', overdue && 'text-danger')}>
+                              {item.title}
+                            </p>
+                            <p className="text-sm text-text-muted">
+                              {formatDate(new Date(item.due_date))}
+                            </p>
+                            {item.estimated_amount && (
+                              <p className="text-sm font-medium mt-1">
+                                {formatCurrency(item.estimated_amount)}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            onClick={(e) => handleDelete(item.id, e)}
+                            className="p-1 rounded-lg text-danger/70 hover:text-danger hover:bg-danger/10 transition-colors opacity-0 group-hover:opacity-100"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+
+                  {completed.length > 0 && (
+                    <>
+                      <div className="pt-3 border-t border-white/5">
+                        <p className="text-xs text-text-muted font-medium uppercase mb-2">
+                          Complétées
+                        </p>
+                      </div>
+                      {completed.map((item, index) => (
+                        <motion.div
+                          key={item.id}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.5 + index * 0.05 }}
+                          className="p-3 rounded-xl border border-success/20 bg-success/5 group"
+                        >
+                          <div className="flex items-start gap-3">
+                            <CheckCircle className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                              <p className="font-medium text-success">{item.title}</p>
+                              <p className="text-sm text-text-muted">
+                                {formatDate(new Date(item.due_date))}
+                              </p>
+                              {item.estimated_amount && (
+                                <p className="text-sm font-medium mt-1">
+                                  {formatCurrency(item.estimated_amount)}
+                                </p>
+                              )}
+                            </div>
+                            <button
+                              onClick={(e) => handleDelete(item.id, e)}
+                              className="p-1 rounded-lg text-danger/70 hover:text-danger hover:bg-danger/10 transition-colors opacity-0 group-hover:opacity-100"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </>
                   )}
-                >
-                  <div className="flex items-start gap-3">
-                    {item.status === 'completed' ? (
-                      <CheckCircle className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
-                    ) : (
-                      <Clock className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-                    )}
-                    <div className="flex-1">
-                      <p className={cn(
-                        'font-medium',
-                        item.status === 'completed' && 'text-success'
-                      )}>
-                        {item.title}
-                      </p>
-                      <p className="text-sm text-text-muted">{item.dueDate}</p>
-                      {item.amount && (
-                        <p className="text-sm font-medium mt-1">{formatCurrency(item.amount)}</p>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
+                </>
+              )}
             </div>
           </Card>
         </motion.div>
       </div>
 
-      {/* Deductions */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-      >
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-success/10">
-                <TrendingDown className="w-5 h-5 text-success" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold">Charges déductibles</h3>
-                <p className="text-sm text-text-muted">
-                  {formatCurrency(validatedDeductions)} validés sur {formatCurrency(totalDeductions)}
-                </p>
-              </div>
-            </div>
-            <Button variant="secondary" size="sm">
-              Ajouter une charge
-            </Button>
-          </div>
-
-          <div className="mb-6">
-            <Progress value={validatedDeductions} max={totalDeductions} size="md" />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {deductions.map((deduction, index) => (
-              <motion.div
-                key={deduction.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.5 + index * 0.05 }}
-                className="p-4 rounded-xl border border-white/5 hover:border-accent/20 transition-all"
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <p className="font-medium">{deduction.category}</p>
-                  <Badge variant={deduction.status === 'validated' ? 'success' : 'warning'}>
-                    {deduction.status === 'validated' ? 'Validé' : 'En attente'}
-                  </Badge>
-                </div>
-                <p className="text-xl font-semibold text-success">-{formatCurrency(deduction.amount)}</p>
-              </motion.div>
-            ))}
-          </div>
-        </Card>
-      </motion.div>
+      {/* Tax Obligation Form Modal */}
+      <TaxObligationForm isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} />
     </div>
   );
 }

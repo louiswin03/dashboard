@@ -7,27 +7,38 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Palette principale - Midnight Purple
+        // Palette principale - Midnight Purple Premium
         surface: {
-          DEFAULT: '#0c0a15',
-          50: '#1a1625',
-          100: '#221d2e',
-          200: '#2a2538',
-          300: '#3d3550',
+          DEFAULT: '#0a0118',
+          50: '#1a0f2e',
+          100: '#1f1538',
+          200: '#291d45',
+          300: '#362a54',
         },
         accent: {
-          DEFAULT: '#8b5cf6',
-          light: '#a78bfa',
-          dark: '#7c3aed',
-          muted: 'rgba(139, 92, 246, 0.15)',
+          DEFAULT: '#a78bfa',
+          light: '#c4b5fd',
+          dark: '#8b5cf6',
+          muted: 'rgba(167, 139, 250, 0.15)',
         },
-        success: '#22c55e',
+        primary: {
+          DEFAULT: '#7c3aed',
+          light: '#a78bfa',
+          dark: '#6d28d9',
+        },
+        secondary: {
+          DEFAULT: '#ec4899',
+          light: '#f9a8d4',
+          dark: '#db2777',
+        },
+        success: '#10b981',
         danger: '#ef4444',
         warning: '#f59e0b',
+        info: '#3b82f6',
         text: {
-          primary: '#fafafa',
-          secondary: '#a1a1aa',
-          muted: '#71717a',
+          primary: '#f8fafc',
+          secondary: '#cbd5e1',
+          muted: '#94a3b8',
         }
       },
       fontFamily: {
@@ -36,10 +47,15 @@ export default {
         mono: ['JetBrains Mono', 'monospace'],
       },
       boxShadow: {
-        'glow': '0 0 40px rgba(139, 92, 246, 0.2)',
-        'glow-sm': '0 0 20px rgba(139, 92, 246, 0.15)',
-        'card': '0 4px 24px rgba(0, 0, 0, 0.4)',
-        'elevated': '0 8px 32px rgba(0, 0, 0, 0.5)',
+        'glow': '0 0 40px rgba(167, 139, 250, 0.4)',
+        'glow-sm': '0 0 20px rgba(167, 139, 250, 0.25)',
+        'glow-md': '0 10px 40px rgba(167, 139, 250, 0.3)',
+        'glow-lg': '0 20px 60px rgba(167, 139, 250, 0.35)',
+        'glow-purple': '0 0 30px rgba(124, 58, 237, 0.5)',
+        'glow-pink': '0 0 30px rgba(236, 72, 153, 0.5)',
+        'card': '0 4px 24px rgba(0, 0, 0, 0.6)',
+        'elevated': '0 8px 32px rgba(0, 0, 0, 0.7)',
+        'elevated-lg': '0 20px 50px rgba(0, 0, 0, 0.8)',
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(ellipse at center, var(--tw-gradient-stops))',
