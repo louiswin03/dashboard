@@ -270,3 +270,6 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
   }
 );
 Input.displayName = 'Input';
+
+// Export Modal separately
+export { default as Modal } from './Modal';

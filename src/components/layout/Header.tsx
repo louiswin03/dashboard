@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '../../lib/supabase';
+import { useUser } from '../../hooks/useSupabase';
+import { useNavigate } from 'react-router-dom';
 import {
   Bell,
   Search,
@@ -17,16 +20,24 @@ interface HeaderProps {
 }
 
 export default function Header({ sidebarCollapsed }: HeaderProps) {
+  const navigate = useNavigate();
+  const { data: userData } = useUser();
+
   const [searchFocused, setSearchFocused] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
 
-  // Mock user data
+  // Get user data from Supabase
   const user = {
-    firstName: 'Louis',
-    lastName: 'Martin',
-    email: 'louis@entreprodash.com',
-    avatar: null,
+    firstName: userData?.user_metadata?.first_name || userData?.user_metadata?.full_name?.split(' ')[0] || 'Utilisateur',
+    lastName: userData?.user_metadata?.last_name || userData?.user_metadata?.full_name?.split(' ').slice(1).join(' ') || '',
+    email: userData?.email || '',
+    avatar: userData?.user_metadata?.avatar_url || null,
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate('/login');
   };
 
   const notifications = [
@@ -206,7 +217,10 @@ export default function Header({ sidebarCollapsed }: HeaderProps) {
                     </button>
                   </div>
                   <div className="p-2 border-t border-white/5">
-                    <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-danger hover:bg-danger/10 transition-colors">
+                    <button
+                      onClick={handleSignOut}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-danger hover:bg-danger/10 transition-colors"
+                    >
                       <LogOut className="w-4 h-4" />
                       <span className="text-sm">Déconnexion</span>
                     </button>

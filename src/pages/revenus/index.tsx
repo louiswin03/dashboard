@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Plus,
@@ -14,6 +14,8 @@ import {
   Repeat,
 } from 'lucide-react';
 import { Card, Button, Badge } from '../../components/common';
+import TransactionForm from '../../components/forms/TransactionForm';
+import { useRevenues } from '../../hooks/useSupabase';
 import { cn, formatCurrency, formatDate, formatPercent } from '../../utils';
 import {
   BarChart,
@@ -82,10 +84,112 @@ const CustomTooltip = ({ active, payload }: any) => {
 export default function Revenus() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
 
-  const filteredRevenues = revenues.filter((revenue) => {
-    const matchesSearch = revenue.source.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      revenue.description.toLowerCase().includes(searchQuery.toLowerCase());
+  // Fetch revenues
+  const { data: revenuesData = [], isLoading } = useRevenues(100);
+
+  // Calculate stats and chart data
+  const { monthlyData, categoryData, stats } = useMemo(() => {
+    if (!revenuesData.length) {
+      return {
+        monthlyData: [],
+        categoryData: [],
+        stats: {
+          thisMonth: 0,
+          thisMonthChange: 0,
+          yearToDate: 0,
+          yearToDateChange: 0,
+          activeClients: 0,
+          activeClientsChange: 0,
+          recurring: 0,
+          recurringChange: 0,
+        },
+      };
+    }
+
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    // This month revenues
+    const thisMonthRevenues = revenuesData.filter(r => {
+      const date = new Date(r.date);
+      return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+    });
+    const thisMonth = thisMonthRevenues.reduce((sum, r) => sum + r.amount, 0);
+
+    // Last month revenues for comparison
+    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+    const lastMonthRevenues = revenuesData.filter(r => {
+      const date = new Date(r.date);
+      return date.getMonth() === lastMonth && date.getFullYear() === lastMonthYear;
+    });
+    const lastMonthAmount = lastMonthRevenues.reduce((sum, r) => sum + r.amount, 0);
+    const thisMonthChange = lastMonthAmount ? ((thisMonth - lastMonthAmount) / lastMonthAmount) * 100 : 0;
+
+    // Year to date
+    const yearToDate = revenuesData
+      .filter(r => new Date(r.date).getFullYear() === currentYear)
+      .reduce((sum, r) => sum + r.amount, 0);
+
+    // Active clients (unique sources this month)
+    const activeClients = new Set(thisMonthRevenues.map(r => r.source).filter(Boolean)).size;
+
+    // Recurring revenues
+    const recurring = thisMonthRevenues
+      .filter(r => r.is_recurring)
+      .reduce((sum, r) => sum + r.amount, 0);
+
+    // Monthly data for chart (last 12 months)
+    const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+    const monthlyData = months.map((name, index) => {
+      const monthRevenues = revenuesData.filter(r => {
+        const date = new Date(r.date);
+        return date.getMonth() === index && date.getFullYear() === currentYear;
+      });
+      return {
+        name,
+        value: monthRevenues.reduce((sum, r) => sum + r.amount, 0),
+      };
+    });
+
+    // Category data
+    const categoryMap = new Map<string, number>();
+    revenuesData.forEach(r => {
+      categoryMap.set(r.category, (categoryMap.get(r.category) || 0) + r.amount);
+    });
+
+    const colors = ['#c9a962', '#22c55e', '#3b82f6', '#a855f7', '#71717a'];
+    const categoryData = Array.from(categoryMap.entries())
+      .map(([name, value], index) => ({
+        name,
+        value,
+        color: colors[index % colors.length],
+      }))
+      .sort((a, b) => b.value - a.value);
+
+    return {
+      monthlyData,
+      categoryData,
+      stats: {
+        thisMonth,
+        thisMonthChange,
+        yearToDate,
+        yearToDateChange: 0, // Would need last year data
+        activeClients,
+        activeClientsChange: 0,
+        recurring,
+        recurringChange: 0,
+      },
+    };
+  }, [revenuesData]);
+
+  const filteredRevenues = revenuesData.filter((revenue) => {
+    const matchesSearch =
+      revenue.source?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      revenue.description?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = !selectedCategory || revenue.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -112,7 +216,7 @@ export default function Revenus() {
             <Download className="w-4 h-4" />
             Exporter
           </Button>
-          <Button variant="primary">
+          <Button variant="primary" onClick={() => setIsFormOpen(true)}>
             <Plus className="w-4 h-4" />
             Nouveau revenu
           </Button>
@@ -121,7 +225,12 @@ export default function Revenus() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, index) => {
+        {[
+          { label: 'Ce mois', value: stats.thisMonth, change: stats.thisMonthChange, icon: Calendar },
+          { label: 'Année en cours', value: stats.yearToDate, change: stats.yearToDateChange, icon: TrendingUp },
+          { label: 'Clients actifs', value: stats.activeClients, change: stats.activeClientsChange, icon: Users, format: 'number' },
+          { label: 'Revenus récurrents', value: stats.recurring, change: stats.recurringChange, icon: Repeat },
+        ].map((stat, index) => {
           const Icon = stat.icon;
           return (
             <motion.div
@@ -296,8 +405,8 @@ export default function Revenus() {
                   >
                     <td className="table-cell">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{revenue.source}</span>
-                        {revenue.recurring && (
+                        <span className="font-medium">{revenue.source || 'N/A'}</span>
+                        {revenue.is_recurring && (
                           <Repeat className="w-3.5 h-3.5 text-accent" />
                         )}
                       </div>
@@ -305,8 +414,8 @@ export default function Revenus() {
                     <td className="table-cell">
                       <Badge variant="accent">{revenue.category}</Badge>
                     </td>
-                    <td className="table-cell text-text-secondary">{revenue.description}</td>
-                    <td className="table-cell text-text-secondary">{formatDate(revenue.date)}</td>
+                    <td className="table-cell text-text-secondary">{revenue.description || '-'}</td>
+                    <td className="table-cell text-text-secondary">{formatDate(new Date(revenue.date))}</td>
                     <td className="table-cell text-right font-semibold text-success">
                       +{formatCurrency(revenue.amount)}
                     </td>
@@ -322,6 +431,13 @@ export default function Revenus() {
           </div>
         </Card>
       </motion.div>
+
+      {/* Transaction Form */}
+      <TransactionForm
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        defaultType="revenue"
+      />
     </div>
   );
 }

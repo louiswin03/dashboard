@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useUser } from '../../hooks/useSupabase';
 import {
   Wallet,
   Receipt,
@@ -14,62 +15,108 @@ import GoalsWidget from '../../components/dashboard/GoalsWidget';
 import RecentTransactions from '../../components/dashboard/RecentTransactions';
 import UpcomingEvents from '../../components/dashboard/UpcomingEvents';
 import { Button } from '../../components/common';
-
-// Mock data
-const stats = {
-  monthlyRevenue: 12450,
-  monthlyRevenueChange: 12.5,
-  monthlyExpenses: 3280,
-  monthlyExpensesChange: -5.2,
-  portfolioValue: 84320,
-  portfolioChange: 8.3,
-  netProfit: 9170,
-  netProfitChange: 18.7,
-};
-
-const chartData = [
-  { name: 'Jan', revenue: 8500, expenses: 3200 },
-  { name: 'Fév', revenue: 9200, expenses: 2900 },
-  { name: 'Mar', revenue: 7800, expenses: 3100 },
-  { name: 'Avr', revenue: 11500, expenses: 3400 },
-  { name: 'Mai', revenue: 10200, expenses: 2800 },
-  { name: 'Jun', revenue: 9800, expenses: 3000 },
-  { name: 'Jul', revenue: 12100, expenses: 3200 },
-  { name: 'Aoû', revenue: 11400, expenses: 2900 },
-  { name: 'Sep', revenue: 13200, expenses: 3100 },
-  { name: 'Oct', revenue: 12800, expenses: 3300 },
-  { name: 'Nov', revenue: 11900, expenses: 3100 },
-  { name: 'Déc', revenue: 12450, expenses: 3280 },
-];
-
-const portfolioAssets = [
-  { id: '1', name: 'Apple Inc.', symbol: 'AAPL', type: 'stock' as const, value: 25400, change: 5.2, allocation: 30 },
-  { id: '2', name: 'Bitcoin', symbol: 'BTC', type: 'crypto' as const, value: 18200, change: 12.8, allocation: 22 },
-  { id: '3', name: 'Appartement Paris', symbol: 'IMMO', type: 'real_estate' as const, value: 35000, change: 2.1, allocation: 42 },
-  { id: '4', name: 'Ethereum', symbol: 'ETH', type: 'crypto' as const, value: 5720, change: -3.4, allocation: 6 },
-];
-
-const goals = [
-  { id: '1', title: 'Fonds d\'urgence', targetAmount: 15000, currentAmount: 12500, category: 'savings' as const, deadline: 'Mars 2025' },
-  { id: '2', title: 'Chiffre d\'affaires annuel', targetAmount: 150000, currentAmount: 124500, category: 'business' as const, deadline: 'Déc 2024' },
-  { id: '3', title: 'Portfolio 100k€', targetAmount: 100000, currentAmount: 84320, category: 'investment' as const, deadline: 'Juin 2025' },
-];
-
-const transactions = [
-  { id: '1', type: 'revenue' as const, amount: 2500, category: 'Freelance', description: 'Client ABC - Projet web', date: new Date(Date.now() - 1000 * 60 * 30) },
-  { id: '2', type: 'expense' as const, amount: 299, category: 'Outils', description: 'Abonnement Figma', date: new Date(Date.now() - 1000 * 60 * 60 * 2) },
-  { id: '3', type: 'revenue' as const, amount: 1800, category: 'Consulting', description: 'Formation React', date: new Date(Date.now() - 1000 * 60 * 60 * 5) },
-  { id: '4', type: 'expense' as const, amount: 89, category: 'Marketing', description: 'Google Ads', date: new Date(Date.now() - 1000 * 60 * 60 * 24) },
-  { id: '5', type: 'revenue' as const, amount: 4200, category: 'Produit', description: 'Vente template', date: new Date(Date.now() - 1000 * 60 * 60 * 48) },
-];
-
-const events = [
-  { id: '1', title: 'Call client ABC', time: '10:00', location: 'Google Meet', type: 'meeting' as const },
-  { id: '2', title: 'Livraison maquettes', time: '14:00', type: 'deadline' as const },
-  { id: '3', title: 'Déclaration TVA', time: '18:00', type: 'reminder' as const },
-];
+import {
+  useDashboardStats,
+  useTransactions,
+  useInvestments,
+  useGoals,
+  useEvents,
+} from '../../hooks/useSupabase';
+import { useMemo } from 'react';
 
 export default function Dashboard() {
+  const { data: user } = useUser();
+  const isAuthenticated = !!user;
+  const userName = user?.user_metadata?.first_name || user?.user_metadata?.full_name || 'Entrepreneur';
+
+  // Fetch data
+  const { data: stats, isLoading: statsLoading } = useDashboardStats();
+  const { data: transactionsData = [], isLoading: transactionsLoading } = useTransactions(10);
+  const { data: investmentsData = [], isLoading: investmentsLoading } = useInvestments();
+  const { data: goalsData = [], isLoading: goalsLoading } = useGoals();
+
+  // Get today's events
+  const today = new Date();
+  const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
+  const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
+  const { data: eventsData = [], isLoading: eventsLoading } = useEvents(startOfDay, endOfDay);
+
+  // Transform investments for portfolio widget
+  const portfolioAssets = useMemo(() => {
+    const totalValue = investmentsData.reduce((sum, inv) => sum + (inv.totalValue || 0), 0);
+
+    return investmentsData.map(inv => ({
+      id: inv.id,
+      name: inv.name,
+      symbol: inv.symbol || '',
+      type: inv.type,
+      value: inv.totalValue || 0,
+      change: inv.changePercent || 0,
+      allocation: totalValue > 0 ? ((inv.totalValue || 0) / totalValue) * 100 : 0,
+    }));
+  }, [investmentsData]);
+
+  // Transform goals data
+  const goalsForWidget = useMemo(() => {
+    return goalsData.slice(0, 3).map(goal => ({
+      id: goal.id,
+      title: goal.title,
+      targetAmount: goal.target_amount,
+      currentAmount: goal.current_amount,
+      category: goal.category,
+      deadline: goal.deadline ? new Date(goal.deadline).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' }) : undefined,
+    }));
+  }, [goalsData]);
+
+  // Transform transactions data
+  const transactionsForWidget = useMemo(() => {
+    return transactionsData.map(t => ({
+      id: t.id,
+      type: t.type,
+      amount: t.amount,
+      category: t.category,
+      description: t.description || (t.type === 'revenue' ? t.source : t.merchant) || '',
+      date: new Date(t.date),
+    }));
+  }, [transactionsData]);
+
+  // Transform events data
+  const eventsForWidget = useMemo(() => {
+    return eventsData.map(e => ({
+      id: e.id,
+      title: e.title,
+      time: new Date(e.start_time).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+      location: e.location,
+      type: e.type,
+    }));
+  }, [eventsData]);
+
+  // Mock chart data for now (will need aggregation query)
+  const chartData = [
+    { name: 'Jan', revenue: 8500, expenses: 3200 },
+    { name: 'Fév', revenue: 9200, expenses: 2900 },
+    { name: 'Mar', revenue: 7800, expenses: 3100 },
+    { name: 'Avr', revenue: 11500, expenses: 3400 },
+    { name: 'Mai', revenue: 10200, expenses: 2800 },
+    { name: 'Jun', revenue: 9800, expenses: 3000 },
+    { name: 'Jul', revenue: 12100, expenses: 3200 },
+    { name: 'Aoû', revenue: 11400, expenses: 2900 },
+    { name: 'Sep', revenue: 13200, expenses: 3100 },
+    { name: 'Oct', revenue: 12800, expenses: 3300 },
+    { name: 'Nov', revenue: 11900, expenses: 3100 },
+    { name: 'Déc', revenue: stats?.monthlyRevenue || 0, expenses: stats?.monthlyExpenses || 0 },
+  ];
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="text-center">
+          <h2 className="text-2xl font-semibold mb-2">Connexion requise</h2>
+          <p className="text-text-secondary">Veuillez vous connecter pour accéder au dashboard</p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -80,7 +127,7 @@ export default function Dashboard() {
           transition={{ duration: 0.5 }}
         >
           <h1 className="text-3xl font-display font-semibold">
-            Bonjour, <span className="gradient-text">Louis</span>
+            Bonjour, <span className="gradient-text">{userName || 'Entrepreneur'}</span>
           </h1>
           <p className="text-text-secondary mt-1">
             Voici un aperçu de votre activité ce mois-ci
@@ -108,29 +155,29 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="Revenus du mois"
-          value={stats.monthlyRevenue}
-          change={stats.monthlyRevenueChange}
+          value={stats?.monthlyRevenue || 0}
+          change={stats?.monthlyRevenueChange || 0}
           icon={Wallet}
           delay={0.1}
         />
         <StatCard
           title="Dépenses du mois"
-          value={stats.monthlyExpenses}
-          change={stats.monthlyExpensesChange}
+          value={stats?.monthlyExpenses || 0}
+          change={stats?.monthlyExpensesChange || 0}
           icon={Receipt}
           delay={0.15}
         />
         <StatCard
           title="Portfolio"
-          value={stats.portfolioValue}
-          change={stats.portfolioChange}
+          value={stats?.portfolioValue || 0}
+          change={stats?.portfolioChange || 0}
           icon={TrendingUp}
           delay={0.2}
         />
         <StatCard
           title="Bénéfice net"
-          value={stats.netProfit}
-          change={stats.netProfitChange}
+          value={stats?.netProfit || 0}
+          change={stats?.netProfitChange || 0}
           icon={PiggyBank}
           delay={0.25}
         />
@@ -147,8 +194,8 @@ export default function Dashboard() {
         <div>
           <PortfolioWidget
             assets={portfolioAssets}
-            totalValue={stats.portfolioValue}
-            totalChange={stats.portfolioChange}
+            totalValue={stats?.portfolioValue || 0}
+            totalChange={stats?.portfolioChange || 0}
           />
         </div>
       </div>
@@ -157,12 +204,12 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Transactions */}
         <div className="lg:col-span-2">
-          <RecentTransactions transactions={transactions} />
+          <RecentTransactions transactions={transactionsForWidget} />
         </div>
 
         {/* Goals */}
         <div>
-          <GoalsWidget goals={goals} />
+          <GoalsWidget goals={goalsForWidget} />
         </div>
       </div>
 
@@ -170,7 +217,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Events */}
         <div>
-          <UpcomingEvents events={events} currentDate={new Date()} />
+          <UpcomingEvents events={eventsForWidget} currentDate={new Date()} />
         </div>
 
         {/* Quick actions or other widgets can go here */}
